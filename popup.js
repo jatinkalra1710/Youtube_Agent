@@ -7,7 +7,7 @@ document.getElementById("askBtn").addEventListener("click", async () => {
     const url = tab.url;
     const question = document.getElementById("question").value;
 
-    const res = await fetch("http://localhost:8000/ask", {
+    const res = await fetch("https://youtube-agent-p26c.onrender.com/ask", {
         method: "POST",
         headers: {
             "Content-Type": "application/json"
