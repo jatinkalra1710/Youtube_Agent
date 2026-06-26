@@ -30,7 +30,7 @@ llm = HuggingFaceEndpoint(
 chat_model = ChatHuggingFace(llm=llm)
 
 embedding_model = HuggingFaceEmbeddings(
-    model_name="BAAI/bge-m3"
+    model_name="intfloat/multilingual-e5-small""
 )
 
 
