@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>YouTube Chatbot</title>
+</head>
+<body>
+    <input id="url" placeholder="Paste YouTube URL">
+    <input id="question" placeholder="Ask question">
+    <button onclick="ask()">Ask</button>
+
+    <p id="answer"></p>
+
+    <script>
+        async function ask() {
+            const url = document.getElementById("url").value;
+            const question = document.getElementById("question").value;
+
+            const res = await fetch("http://localhost:8000/ask", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    url,
+                    question,
+                    language: "English"
+                })
+            });
+
+            const data = await res.json();
+            document.getElementById("answer").innerText = data.answer;
+        }
+    </script>
+</body>
+</html>
