@@ -9,7 +9,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import (
     ChatHuggingFace,
     HuggingFaceEndpoint,
-    HuggingFaceEmbeddings
+    HuggingFaceEndpointEmbeddings
 )
 from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import PromptTemplate
@@ -29,8 +29,9 @@ llm = HuggingFaceEndpoint(
 
 chat_model = ChatHuggingFace(llm=llm)
 
-embedding_model = HuggingFaceEmbeddings(
-    model_name="intfloat/multilingual-e5-small"
+embedding_model = HuggingFaceEndpointEmbeddings(
+    model_name="BAAI/bge-m3",
+    huggingfacehub_api_token=HF_TOKEN
 )
 
 
