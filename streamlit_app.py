@@ -1,5 +1,6 @@
 import os
 import re
+from ytt_api import ytt_api
 import streamlit as st
 from dotenv import load_dotenv
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -49,17 +50,35 @@ def extract_video_id(url):
 
 
 def fetch_transcript(video_id):
-    api = YouTubeTranscriptApi()
-    transcript_list = api.fetch(
-        video_id,
-        languages=["pa", "hi", "en"]
-    )
+    try:
+        # First try youtube-transcript-api
+        api = YouTubeTranscriptApi()
+        transcript_list = api.fetch(
+            video_id,
+            languages=["pa", "hi", "en"]
+        )
 
-    transcript = " ".join(
-        chunk.text for chunk in transcript_list
-    )
+        transcript = " ".join(
+            chunk.text for chunk in transcript_list
+        )
 
-    return transcript
+        return transcript
+
+    except Exception:
+        try:
+            # Fallback to ytt-api
+            transcript_data = ytt_api.get_transcript(video_id)
+
+            transcript = " ".join(
+                item["text"] for item in transcript_data
+            )
+
+            return transcript
+
+        except Exception:
+            raise Exception(
+                "Could not fetch transcript. Video may not have captions or YouTube blocked the request."
+            )
 
 
 def build_vectorstore(transcript):
