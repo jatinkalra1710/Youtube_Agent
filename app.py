@@ -1,6 +1,7 @@
 import os
 import re
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
@@ -14,11 +15,21 @@ from langchain_huggingface import (
 from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import PromptTemplate
 
+
 load_dotenv()
 
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 HF_TOKEN = os.getenv("HUGGINGFACEHUB_API_TOKEN")
+
 
 llm = HuggingFaceEndpoint(
     repo_id="Qwen/Qwen2.5-7B-Instruct",
@@ -29,11 +40,6 @@ llm = HuggingFaceEndpoint(
 
 chat_model = ChatHuggingFace(llm=llm)
 
-embedding_model = HuggingFaceEndpointEmbeddings(
-    model_name="BAAI/bge-m3",
-    huggingfacehub_api_token=HF_TOKEN
-)
-
 
 class QueryRequest(BaseModel):
     url: str
@@ -41,47 +47,68 @@ class QueryRequest(BaseModel):
     language: str = "English"
 
 
-def extract_video_id(url):
-    match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11}).*", url)
+def extract_video_id(url: str):
+    match = re.search(
+        r"(?:youtube\.com/watch\?v=|youtu\.be/)([0-9A-Za-z_-]{11})",
+        url
+    )
+
+    if not match:
+        raise HTTPException(status_code=400, detail="Invalid YouTube URL")
+
     return match.group(1)
 
 
 @app.post("/ask")
 def ask_question(data: QueryRequest):
-    video_id = extract_video_id(data.url)
+    try:
+        video_id = extract_video_id(data.url)
 
-    api = YouTubeTranscriptApi()
-    transcript_list = api.fetch(video_id, languages=["pa", "hi", "en"])
+        api = YouTubeTranscriptApi()
+        transcript_list = api.fetch(
+            video_id,
+            languages=["pa", "hi", "en"]
+        )
 
-    transcript = " ".join(chunk.text for chunk in transcript_list)
+        transcript = " ".join(
+            chunk.text for chunk in transcript_list
+        )
 
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=200
-    )
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000,
+            chunk_overlap=200
+        )
 
-    docs = splitter.create_documents([transcript])
+        docs = splitter.create_documents([transcript])
 
-    vectorstore = FAISS.from_documents(
-        docs,
-        embedding_model
-    )
+        # Lazy load embeddings (important for deployment)
+        embedding_model = HuggingFaceEndpointEmbeddings(
+            model="BAAI/bge-m3",
+            huggingfacehub_api_token=HF_TOKEN
+        )
 
-    retriever = vectorstore.as_retriever(
-        search_kwargs={"k": 4}
-    )
+        vectorstore = FAISS.from_documents(
+            docs,
+            embedding_model
+        )
 
-    retrieved_docs = retriever.invoke(data.question)
+        retriever = vectorstore.as_retriever(
+            search_kwargs={"k": 3}
+        )
 
-    context = "\n".join(doc.page_content for doc in retrieved_docs)
+        retrieved_docs = retriever.invoke(data.question)
 
-    template = """
+        context = "\n".join(
+            doc.page_content for doc in retrieved_docs
+        )
+
+        template = """
 You are an expert assistant.
 
-Answer only from transcript.
+Answer ONLY from the transcript context.
 Respond in {language}.
 
-If answer is not found, say:
+If the answer is not found in the context, say:
 "I Don't Know"
 
 Context:
@@ -91,28 +118,25 @@ Question:
 {question}
 """
 
-    prompt = PromptTemplate(
-        template=template,
-        input_variables=["context", "question", "language"]
-    )
+        prompt = PromptTemplate(
+            template=template,
+            input_variables=["context", "question", "language"]
+        )
 
-    final_prompt = prompt.invoke({
-        "context": context,
-        "question": data.question,
-        "language": data.language
-    })
+        final_prompt = prompt.invoke({
+            "context": context,
+            "question": data.question,
+            "language": data.language
+        })
 
-    answer = chat_model.invoke(final_prompt)
+        answer = chat_model.invoke(final_prompt)
 
-    return {
-        "answer": answer.content
-    }
+        return {
+            "answer": answer.content
+        }
 
-from fastapi.middleware.cors import CORSMiddleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
