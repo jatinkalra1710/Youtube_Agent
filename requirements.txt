@@ -5,3 +5,4 @@ langchain-huggingface
 langchain-text-splitters
 faiss-cpu
 python-dotenv
+ytt-api
